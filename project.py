@@ -1,14 +1,12 @@
-import requests
+import requests             #import requests from requirements.txt or straight from terminal using pip install
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 import json
 import webbrowser
-import os
 import tempfile
 
 @dataclass
-class Driver:
+class Driver:  #creates a dataclass to store driver info
     driver_number: int
     first_name: str
     last_name: str
@@ -18,12 +16,12 @@ class Driver:
     headshot_url: str
 
 class F1DriverAPI:
-    BASE_URL = "https://api.openf1.org/v1"
+    BASE_URL = "https://api.openf1.org/v1" #to retrieve data from openf1 api
 
     def __init__(self):
-        self.session = requests.Session()
+        self.session = requests.Session() #initialize
 
-    def _make_request(self, endpoint: str, params: dict = None) -> Optional[Dict]:
+    def _make_request(self, endpoint: str, params: dict = None) -> Optional[Dict]: #function to make req to the api
         """Helper method to make API requests with error handling."""
         try:
             response = self.session.get(f"{self.BASE_URL}/{endpoint}", params=params)
@@ -36,156 +34,56 @@ class F1DriverAPI:
             print(f"Error parsing JSON response: {str(e)}")
             return None
 
-    def search_drivers_by_name(self, name: str) -> List[Driver]:
-        """
-        Search for drivers by name (case-insensitive).
+def search_drivers_by_name(self, name: str) -> List[Driver]:
+    """
+    Search for drivers by name (case-insensitive). Accepts first name, last name, or full name.
+    
+    Args:
+        name: The name to search for (can be first name, last name, or full name)
         
-        Args:
-            name: The name to search for (can be first or last name)
-            
-        Returns:
-            List of matching Driver objects
-        """
-        # Get all drivers from the latest session
-        params = {
-            'session_key': 'latest'
-        }
-        data = self._make_request('drivers', params)
+    Returns:
+        List of matching Driver objects
+    """
+    # Get all drivers from the latest session 
+    params = {
+        'session_key': 'latest'
+    }
+    data = self._make_request('drivers', params)
+    
+    if not data:
+        print("Error fetching driver list")
+        return []
         
-        if not data:
-            print("Error fetching driver list")
-            return []
+    try:
+        drivers = []
+        name_lower = name.lower()
+        for driver_data in data:
+            first_name = driver_data.get('first_name', '')
+            last_name = driver_data.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip().lower()
             
-        try:
-            drivers = []
-            for driver_data in data:
-                # Check if name matches
-                if (name.lower() in driver_data.get('first_name', '').lower() or 
-                    name.lower() in driver_data.get('last_name', '').lower()):
-                    drivers.append(Driver(
-                        driver_number=driver_data.get('driver_number'),
-                        first_name=driver_data.get('first_name', ''),
-                        last_name=driver_data.get('last_name', ''),
-                        team_name=driver_data.get('team_name', ''),
-                        team_colour=driver_data.get('team_colour', ''),
-                        country_code=driver_data.get('country_code', ''),
-                        headshot_url=driver_data.get('headshot_url', '')
-                    ))
-            
-            return drivers
-            
-        except (AttributeError, TypeError) as e:
-            print(f"Error parsing driver data: {str(e)}")
-            return []
+            # Match against first name, last name, or full name
+            if (name_lower in first_name.lower() or
+                name_lower in last_name.lower() or
+                name_lower in full_name):
+                drivers.append(Driver(
+                    driver_number=driver_data.get('driver_number'),
+                    first_name=first_name,
+                    last_name=last_name,
+                    team_name=driver_data.get('team_name', ''),
+                    team_colour=driver_data.get('team_colour', ''),
+                    country_code=driver_data.get('country_code', ''),
+                    headshot_url=driver_data.get('headshot_url', '')
+                ))
+        
+        return drivers
+        
+    except (AttributeError, TypeError) as e:
+        print(f"Error parsing driver data: {str(e)}")
+        return []
 
-    def get_driver_lap_times(self, driver_number: int, session_key: str) -> List[Dict]:
-        """
-        Get lap times for a specific driver in a session.
-        
-        Args:
-            driver_number: The driver's unique number
-            session_key: The session identifier
-            
-        Returns:
-            List of lap times with additional information
-        """
-        params = {
-            'session_key': session_key,
-            'driver_number': driver_number
-        }
-        data = self._make_request('laps', params)
-        
-        if not data:
-            return []
-            
-        try:
-            lap_times = []
-            for lap in data:
-                lap_times.append({
-                    'lap_number': lap.get('lap_number'),
-                    'lap_time': lap.get('lap_time'),
-                    'sector_1': lap.get('sector_1'),
-                    'sector_2': lap.get('sector_2'),
-                    'sector_3': lap.get('sector_3'),
-                    'compound': lap.get('compound'),
-                    'lap_position': lap.get('position')
-                })
-            return lap_times
-            
-        except (AttributeError, TypeError) as e:
-            print(f"Error parsing lap times: {str(e)}")
-            return []
 
-    def get_weather_conditions(self, session_key: str) -> Optional[Dict]:
-        """
-        Get weather conditions for a specific session.
-        
-        Args:
-            session_key: The session identifier
-            
-        Returns:
-            Dictionary containing weather information
-        """
-        params = {
-            'session_key': session_key
-        }
-        data = self._make_request('weather', params)
-        
-        if not data:
-            return None
-            
-        try:
-            return {
-                'air_temperature': data.get('air_temperature'),
-                'track_temperature': data.get('track_temperature'),
-                'humidity': data.get('humidity'),
-                'wind_speed': data.get('wind_speed'),
-                'wind_direction': data.get('wind_direction'),
-                'rain_probability': data.get('rain_probability'),
-                'weather_status': data.get('weather_status')
-            }
-            
-        except (AttributeError, TypeError) as e:
-            print(f"Error parsing weather data: {str(e)}")
-            return None
-
-    def get_team_radio(self, driver_number: int, session_key: str) -> List[Dict]:
-        """
-        Get team radio communications for a specific driver in a session.
-        
-        Args:
-            driver_number: The driver's unique number
-            session_key: The session identifier
-            
-        Returns:
-            List of radio communications
-        """
-        params = {
-            'session_key': session_key,
-            'driver_number': driver_number
-        }
-        data = self._make_request('team_radio', params)
-        
-        if not data:
-            return []
-            
-        try:
-            communications = []
-            for message in data:
-                communications.append({
-                    'timestamp': message.get('timestamp'),
-                    'direction': message.get('direction'),
-                    'message': message.get('message'),
-                    'sender': message.get('sender'),
-                    'receiver': message.get('receiver')
-                })
-            return communications
-            
-        except (AttributeError, TypeError) as e:
-            print(f"Error parsing team radio data: {str(e)}")
-            return []
-
-def create_html(driver: Driver, details: Dict = None, results: List[Dict] = None, standings: Dict = None, lap_times: List[Dict] = None, weather: Dict = None, team_radio: List[Dict] = None) -> str:
+def create_html(driver: Driver) -> str: #to display the output in the web browser
     """Create HTML content for displaying driver information."""
     html = f"""
     <!DOCTYPE html>
@@ -272,7 +170,7 @@ def create_html(driver: Driver, details: Dict = None, results: List[Dict] = None
     """
     return html
 
-def open_in_browser(html_content: str) -> None:
+def open_in_browser(html_content: str) -> None: #open the web browser
     """Open HTML content in the default web browser."""
     try:
         with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html') as temp:
@@ -284,18 +182,18 @@ def open_in_browser(html_content: str) -> None:
         print("You can view the driver information by copying the following HTML:")
         print(html_content)
 
-def main():
+def main(): #main
     api = F1DriverAPI()
     
     while True:
-        print("\nF1 Driver Information System")
+        print("\nF1 Driver Information System") #using while to exit the loop if the user chooses to exit and choose to search if selects 1
         print("1. Search for a driver")
         print("2. Exit")
         
-        choice = input("\nEnter your choice (1-2): ")
+        choice = input("\nEnter your choice (1-2): ") #prompts user
         
         if choice == '1':
-            name = input("Enter driver name (e.g., 'Max' or 'Verstappen'): ").lower()
+            name = input("Enter driver name (e.g., 'Max' or 'Verstappen'): ").lower() #for example
             print(f"\nSearching for drivers with name '{name}'...")
             
             drivers = api.search_drivers_by_name(name)
@@ -317,4 +215,22 @@ def main():
         input("\nPress Enter to continue...")
 
 if __name__ == "__main__":
-    main()
+    main() #calls main
+    
+
+#let us try our project
+
+#to search our hero - Max Verstappen
+#select option 1
+#we see a popup of chrome web browser that allows us to view the output with the driver details
+
+#lets check the next driver, Hamilton
+#Oscar Piastri
+#Charles Leclerc we can either enter the first or the last name
+
+
+
+#we have now added FULL NAME functionality
+
+
+
